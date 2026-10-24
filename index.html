@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0d14" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235ef2b0'/%3E%3Ctext x='32' y='45' font-family='monospace' font-size='36' font-weight='bold' text-anchor='middle' fill='%2304110d'%3ES%3C/text%3E%3C/svg%3E" />
+<title>Spell Rush · 听音拼词</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-glow bg-glow-a" aria-hidden="true"></div>
+<div class="bg-glow bg-glow-b" aria-hidden="true"></div>
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-mark">SR</span>
+      <div class="brand-text">
+        <h1>SPELL RUSH</h1>
+        <p>听音拼词 · 3229 词库</p>
+      </div>
+    </div>
+    <div class="net-status" id="netStatus" data-state="idle">
+      <span class="dot"></span>
+      <span id="netText">未连接</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <!-- ============ 首页 ============ -->
+    <section class="screen is-active" id="screenHome">
+      <div class="hero">
+        <p class="eyebrow">LISTEN · SPELL · WIN</p>
+        <h2 class="hero-title">听见单词<br /><span>把它拼出来</span></h2>
+        <p class="hero-desc">英式、美式发音随时切换。单机靠三滴血闯关，联机 30 秒限时抢分。</p>
+      </div>
+
+      <div class="mode-grid">
+        <button class="mode-card" id="btnSolo" type="button">
+          <span class="mode-icon icon-solo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
+              <rect x="2.5" y="13" width="4" height="7" rx="2" />
+              <rect x="17.5" y="13" width="4" height="7" rx="2" />
+              <path d="M20 20a3 3 0 0 1-3 2h-3" />
+            </svg>
+          </span>
+          <span class="mode-body">
+            <span class="mode-tag">单机闯关</span>
+            <span class="mode-title">SOLO RUN</span>
+            <span class="mode-list">
+              <span>随机出词 · 不重复</span>
+              <span>3 滴血 · 错一题扣 1 滴</span>
+            </span>
+          </span>
+          <span class="mode-go" aria-hidden="true">→</span>
+        </button>
+
+        <button class="mode-card" id="btnMulti" type="button">
+          <span class="mode-icon icon-multi" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="8" r="3.2" />
+              <circle cx="16.5" cy="9.5" r="2.6" />
+              <path d="M2.5 20c0-3 2.4-5.2 5.5-5.2S13.5 17 13.5 20" />
+              <path d="M15 14.6c3 .1 5.2 2.1 5.2 5.4" />
+            </svg>
+          </span>
+          <span class="mode-body">
+            <span class="mode-tag">MQTT 联机</span>
+            <span class="mode-title">1 v 1 DUEL</span>
+            <span class="mode-list">
+              <span>每轮 30 秒 · 双人对拼</span>
+              <span>答对 +100 / +150 / +200</span>
+            </span>
+          </span>
+          <span class="mode-go" aria-hidden="true">→</span>
+        </button>
+      </div>
+
+      <p class="home-foot">本地英美发音 &nbsp;·&nbsp; MQTT 实时对战 &nbsp;·&nbsp; 词库来自 words.xlsx</p>
+    </section>
+
+    <!-- ============ 单机 ============ -->
+    <section class="screen" id="screenSolo">
+      <div class="game-top">
+        <button class="ghost-btn" id="btnSoloBack" type="button">← 返回</button>
+        <div class="hearts" id="soloHearts" aria-label="剩余生命"></div>
+        <div class="mini-stats">
+          <div><span id="soloCorrect">0</span><small>答对</small></div>
+          <div><span id="soloStreak">0</span><small>连击</small></div>
+        </div>
+      </div>
+
+      <div class="play-card">
+        <p class="round-line"><span id="soloIndex">第 1 题</span><span class="round-sep">/</span><span id="soloPool">3229 词随机</span></p>
+        <h3 class="prompt">听发音，拼出这个单词</h3>
+
+        <div class="accent-row">
+          <button class="accent-btn" id="soloPlayUk" type="button" data-accent="uk">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /><path d="M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            英式发音
+            <em>UK</em>
+          </button>
+          <button class="accent-btn" id="soloPlayUs" type="button" data-accent="us">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /><path d="M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            美式发音
+            <em>US</em>
+          </button>
+        </div>
+
+        <form class="answer-form" id="soloForm" autocomplete="off">
+          <input class="answer-input" id="soloInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="输入你听到的单词" aria-label="拼写输入" />
+          <button class="primary-btn" id="soloSubmit" type="submit">提交</button>
+        </form>
+
+        <p class="feedback" id="soloFeedback" aria-live="polite">按回车提交，答错扣 1 滴血</p>
+      </div>
+    </section>
+
+    <!-- ============ 联机大厅 ============ -->
+    <section class="screen" id="screenLobby">
+      <div class="game-top">
+        <button class="ghost-btn" id="btnLobbyBack" type="button">← 返回</button>
+        <h3 class="screen-title">联机对战</h3>
+        <span class="spacer"></span>
+      </div>
+
+      <div class="lobby-panel" id="lobbyEntry">
+        <div class="field">
+          <label for="nameInput">你的昵称</label>
+          <input class="text-input" id="nameInput" maxlength="10" placeholder="给自己起个名字" />
+        </div>
+
+        <button class="primary-btn wide" id="btnCreate" type="button">创建房间</button>
+
+        <div class="divider"><span>或者加入朋友的房间</span></div>
+
+        <div class="join-row">
+          <input class="text-input code-input" id="roomInput" maxlength="6" placeholder="房间码" autocapitalize="characters" />
+          <button class="primary-btn" id="btnJoin" type="button">加入</button>
+        </div>
+
+        <p class="lobby-tip" id="lobbyTip">创建房间后，把 5 位房间码发给朋友即可开战</p>
+
+        <div class="rule-strip">
+          <div><b>30s</b><span>每轮限时</span></div>
+          <div><b>100</b><span>第一轮答对</span></div>
+          <div><b>150</b><span>第二轮答对</span></div>
+          <div><b>200</b><span>第三轮答对</span></div>
+        </div>
+      </div>
+
+      <div class="lobby-panel room-panel" id="roomBox" hidden>
+        <p class="room-label">房间码</p>
+        <div class="room-code-row">
+          <span class="room-code" id="roomCodeText">-----</span>
+          <button class="copy-btn" id="btnCopyRoom" type="button">复制</button>
+        </div>
+        <p class="room-status" id="roomStatus">等待对手加入…</p>
+        <div class="room-players">
+          <div class="rp me"><span class="rp-dot"></span><span id="rpMeName">你</span></div>
+          <div class="rp-vs">VS</div>
+          <div class="rp opp"><span class="rp-dot"></span><span id="rpOppName">等待中…</span></div>
+        </div>
+        <button class="primary-btn wide" id="btnHostStart" type="button" disabled>开始对战</button>
+        <button class="ghost-btn wide" id="btnLeaveRoom" type="button">离开房间</button>
+      </div>
+    </section>
+
+    <!-- ============ 联机对战 ============ -->
+    <section class="screen" id="screenMulti">
+      <div class="game-top">
+        <button class="ghost-btn" id="btnMultiLeave" type="button">← 退出</button>
+        <span class="match-meta" id="multiMatchMeta">第 1 / 8 词 · 先到 500 分</span>
+        <span class="spacer"></span>
+      </div>
+
+      <div class="scoreboard">
+        <div class="player-card" id="cardMe">
+          <span class="player-name" id="meName">你</span>
+          <span class="player-score" id="meScore">0</span>
+          <span class="turn-flag">你的回合</span>
+        </div>
+        <div class="score-mid">
+          <span class="vs-text">VS</span>
+          <span class="word-no" id="wordNo">#1</span>
+        </div>
+        <div class="player-card" id="cardOpp">
+          <span class="player-name" id="oppName">对手</span>
+          <span class="player-score" id="oppScore">0</span>
+          <span class="turn-flag">对手回合</span>
+        </div>
+      </div>
+
+      <div class="timerbar" id="timerBar">
+        <span class="timer-fill" id="timerFill"></span>
+        <span class="timer-num" id="timerNum">30</span>
+      </div>
+
+      <div class="play-card">
+        <p class="round-line">
+          <span id="multiRound">第 1 轮</span>
+          <span class="round-sep">·</span>
+          <span id="multiPoints">答对 +100</span>
+          <span class="round-sep">·</span>
+          <span id="multiWords">词 1 / 8</span>
+        </p>
+
+        <div class="accent-row">
+          <button class="accent-btn" id="multiPlayUk" type="button" data-accent="uk">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /><path d="M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            英式
+            <em>UK</em>
+          </button>
+          <button class="accent-btn" id="multiPlayUs" type="button" data-accent="us">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /><path d="M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            美式
+            <em>US</em>
+          </button>
+        </div>
+
+        <form class="answer-form" id="multiForm" autocomplete="off">
+          <input class="answer-input" id="multiInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="输入你听到的单词" aria-label="拼写输入" />
+          <button class="primary-btn" id="multiSubmit" type="submit">提交</button>
+        </form>
+
+        <p class="feedback" id="multiFeedback" aria-live="polite">等待对手作答…</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 结果浮层 -->
+<div class="overlay" id="overlay" hidden>
+  <div class="overlay-card">
+    <p class="overlay-eyebrow" id="ovEyebrow">对战结束</p>
+    <h3 class="overlay-title" id="ovTitle">你赢了</h3>
+    <p class="overlay-desc" id="ovDesc"></p>
+    <div class="overlay-actions">
+      <button class="primary-btn" id="ovPrimary" type="button">再来一局</button>
+      <button class="ghost-btn" id="ovSecondary" type="button">返回</button>
+    </div>
+  </div>
+</div>
+
+<!-- 加载浮层 -->
+<div class="loading-overlay" id="loadingOverlay" hidden>
+  <div class="loading-card">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <p class="loading-text" id="loadingText">正在加载词库音频…</p>
+  </div>
+</div>
+
+<script src="js/mqtt.min.js"></script>
+<script src="js/words.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
