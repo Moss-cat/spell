@@ -17,11 +17,10 @@
   const MATCH_TARGET = 500;
   const MAX_WORDS = 8;
   const COUNTDOWN_MS = 3000;
-  const REVEAL_MS = { wrong: 1500, correct: 1900, none: 2400 };
+  const REVEAL_MS = { wrong: 1500, correct: 2600, none: 3200 };
   const PRESENCE_EVERY = 2500;
   const GUEST_TIMEOUT = 9000;
   const HOST_TIMEOUT = 8000;
-  const AUDIO_PACKS = ['words_ab.zip', 'words_c.zip', 'words_de.zip', 'words_fgh.zip', 'words_ijklmn.zip', 'words_opqr.zip', 'words_st.zip', 'words_uvwxyz.zip'];
 
   /* ---------------- DOM ---------------- */
   const $ = (id) => document.getElementById(id);
@@ -139,79 +138,59 @@
     return window.matchMedia && window.matchMedia('(pointer: fine)').matches;
   }
 
-  /* ---------------- 音频包（zip 运行时解析，store 模式无需解压） ---------------- */
-  const audioPack = new Map(); // key: word.toLowerCase() + '|' + accent -> Uint8Array
-  let audioPackReady = false;
+  /* ---------------- 发音 ----------------
+     按需加载：每个词用到时才 fetch（~22KB）+ decodeAudioData 解码缓存为 PCM，
+     播放是采样级调度，无缓冲卡顿；页面无需预载，秒开。
+     fetch 不可用时（file:// 直开）回退 <audio> 元素直读，再失败回退系统 TTS。 */
+  let audioCtx = null;
+  const decodedCache = new Map(); // key: word|accent -> Promise<AudioBuffer>
+  let activeSource = null;
 
-  // 仅支持 store 模式（compression method 0）的 ZIP，直接读出原始字节
-  function parseStoreZip(buffer) {
-    const view = new DataView(buffer);
-    const bytes = new Uint8Array(buffer);
-    // 从末尾向前搜索 EOCD 签名 0x06054b50
-    let eocd = -1;
-    const searchFrom = Math.max(0, bytes.length - 65557);
-    for (let i = bytes.length - 22; i >= searchFrom; i--) {
-      if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
     }
-    if (eocd < 0) throw new Error('zip: EOCD not found');
-    const entryCount = view.getUint16(eocd + 10, true);
-    let cdOff = view.getUint32(eocd + 16, true);
-    const out = new Map();
-    const td = new TextDecoder('utf-8');
-    for (let i = 0; i < entryCount; i++) {
-      if (view.getUint32(cdOff, true) !== 0x02014b50) break;
-      const compSize = view.getUint32(cdOff + 20, true);
-      const nameLen = view.getUint16(cdOff + 28, true);
-      const extraLen = view.getUint16(cdOff + 30, true);
-      const commentLen = view.getUint16(cdOff + 32, true);
-      const localOff = view.getUint32(cdOff + 42, true);
-      const name = td.decode(bytes.subarray(cdOff + 46, cdOff + 46 + nameLen));
-      const lNameLen = view.getUint16(localOff + 26, true);
-      const lExtraLen = view.getUint16(localOff + 28, true);
-      const dataOff = localOff + 30 + lNameLen + lExtraLen;
-      out.set(name, new Uint8Array(bytes.subarray(dataOff, dataOff + compSize)));
-      cdOff += 46 + nameLen + extraLen + commentLen;
-    }
-    return out;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
   }
 
-  async function loadAudioPacks(onProgress) {
-    const maps = await Promise.all(AUDIO_PACKS.map(async (url, idx) => {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(url + ' ' + res.status);
-      const buf = await res.arrayBuffer();
-      if (onProgress) onProgress(idx + 1, AUDIO_PACKS.length);
-      return parseStoreZip(buf);
-    }));
-    for (const map of maps) {
-      for (const [name, data] of map) {
-        const m = name.match(/^(.+)_(uk|us)\.mp3$/i);
-        if (m) audioPack.set(m[1].toLowerCase() + '|' + m[2].toLowerCase(), data);
-      }
-    }
-    audioPackReady = true;
+  function getWordBuffer(word, acc) {
+    const key = word.toLowerCase() + '|' + acc;
+    if (decodedCache.has(key)) return decodedCache.get(key);
+    const p = (async () => {
+      const ctx = ensureAudioCtx();
+      if (!ctx) throw new Error('no AudioContext');
+      const res = await fetch('words/' + encodeURIComponent(word) + '_' + acc + '.mp3');
+      if (!res.ok) throw new Error('audio ' + res.status);
+      return await ctx.decodeAudioData(await res.arrayBuffer());
+    })();
+    decodedCache.set(key, p);
+    p.catch(() => decodedCache.delete(key));
+    return p;
   }
 
-  /* ---------------- 发音 ---------------- */
+  function playWordWebAudio(word, acc) {
+    getWordBuffer(word, acc).then((buf) => {
+      if (activeSource) { try { activeSource.stop(); } catch (e) { /* ignore */ } }
+      const node = audioCtx.createBufferSource();
+      node.buffer = buf;
+      node.connect(audioCtx.destination);
+      activeSource = node;
+      node.start();
+    }).catch(() => playWordElement(word, acc));
+  }
+
+  // file:// 回退：<audio> 元素直读 words/ 目录
   const audioCache = new Map();
   let activeAudio = null;
 
-  function playWord(word, accent) {
-    if (!word) return;
-    const acc = accent === 'uk' ? 'uk' : 'us';
-    accentPref = acc;
-    flashAccent(acc);
-
+  function playWordElement(word, acc) {
     const src = 'words/' + encodeURIComponent(word) + '_' + acc + '.mp3';
     let audio = audioCache.get(src);
     if (!audio) {
-      const key = word.toLowerCase() + '|' + acc;
-      if (audioPack.has(key)) {
-        const blob = new Blob([audioPack.get(key)], { type: 'audio/mpeg' });
-        audio = new Audio(URL.createObjectURL(blob));
-      } else {
-        audio = new Audio(src); // 回退：本地 words/ 目录
-      }
+      audio = new Audio(src);
       audio.preload = 'auto';
       audio.addEventListener('error', () => {
         if (!audio._ttsTried) {
@@ -241,13 +220,27 @@
       }
     };
 
-    // 确保音频加载到可播放状态再播，避免卡顿/断续
-    if (audio.readyState >= 2) {
+    // 等 canplay（HAVE_FUTURE_DATA）再播，避免只加载到首帧就播导致断续
+    if (audio.readyState >= 3) {
       doPlay();
     } else {
       audio.addEventListener('canplay', doPlay, { once: true });
       audio.load();
     }
+  }
+
+  function wordCn(word) {
+    const dict = window.WORD_CN;
+    if (!dict || !word) return '';
+    return dict[String(word).toLowerCase()] || '';
+  }
+
+  function playWord(word, accent) {
+    if (!word) return;
+    const acc = accent === 'uk' ? 'uk' : 'us';
+    accentPref = acc;
+    flashAccent(acc);
+    playWordWebAudio(word, acc); // 失败时内部自动回退 playWordElement → TTS
   }
 
   function speakWord(word, accent) {
@@ -392,13 +385,14 @@
       soloInput.disabled = true;
       soloSubmit.disabled = true;
       soloFeedback.className = 'feedback ok';
-      soloFeedback.textContent = solo.streak > 1
-        ? '✓ 正确！连击 x' + solo.streak
-        : '✓ 正确！';
+      const okCn = wordCn(solo.word);
+      soloFeedback.innerHTML = '✓ 正确！' + (solo.streak > 1 ? '连击 x' + solo.streak + ' · ' : '')
+        + '<span class="spell">' + esc(solo.word) + '</span>'
+        + (okCn ? '<span class="cn">' + esc(okCn) + '</span>' : '');
       renderSoloStats();
       solo.timer = setTimeout(() => {
         if (activeScreenId === 'screenSolo') nextSoloWord();
-      }, 700);
+      }, 1600);
       return;
     }
 
@@ -409,13 +403,15 @@
     soloSubmit.disabled = true;
     renderSoloStats(solo.hearts);
     soloFeedback.className = 'feedback answer-reveal';
-    soloFeedback.innerHTML = '正确答案：<span class="spell">' + esc(solo.word) + '</span>';
+    const badCn = wordCn(solo.word);
+    soloFeedback.innerHTML = '正确答案：<span class="spell">' + esc(solo.word) + '</span>'
+      + (badCn ? '<span class="cn">' + esc(badCn) + '</span>' : '');
     const dead = solo.hearts <= 0;
     solo.timer = setTimeout(() => {
       if (activeScreenId !== 'screenSolo') return;
       if (dead) showSoloEnd();
       else nextSoloWord();
-    }, 1700);
+    }, 2400);
   }
 
   function showSoloEnd() {
@@ -1292,23 +1288,23 @@
     } else if (s.phase === 'playing') {
       if (submitted) fbText = '已提交，等待判定…';
       else if (activeTurn) fbText = '你的回合 · 30 秒内拼出单词';
-      else fbText = '等待 ' + oppName + ' 作答…';
+      else fbText = '等待 ' + esc(oppName) + ' 作答…';
     } else if (s.phase === 'reveal' && s.reveal) {
       const r = s.reveal;
+      const rCn = wordCn(r.answer);
+      const cnHtml = rCn ? '<span class="cn">' + esc(rCn) + '</span>' : '';
       if (r.kind === 'correct') {
         fbClass = 'feedback ok';
         const isMe = r.scorer === myRole;
-        fbText = (isMe ? '你' : oppName) + (isMe ? '' : ' ') + '答对 +' + r.points + ' 分';
+        fbText = (isMe ? '你' : esc(oppName)) + ' 答对 +' + r.points + ' 分 · <span class="spell">' + esc(r.answer) + '</span>' + cnHtml;
       } else if (r.kind === 'wrong') {
         fbClass = 'feedback bad';
         const byMe = r.by === myRole;
-        const byName = byMe ? '你' : oppName;
-        const nextName = byMe ? oppName : '你';
-        fbText = byName + (byMe ? '' : ' ') + '答错了，轮到' +
-          (byMe ? ' ' + nextName : nextName) + '（第 ' + (r.attempt + 1) + ' 轮）';
+        // 换人不换词，不公布答案和释义，避免给下一位玩家提示
+        fbText = (byMe ? '你' : esc(oppName)) + ' 答错了，轮到' + (byMe ? ' ' + esc(oppName) : '你') + '（第 ' + (r.attempt + 1) + ' 轮）';
       } else {
         fbClass = 'feedback answer-reveal';
-        fbText = '正确答案：' + r.answer + ' · 本题无效';
+        fbText = '正确答案：<span class="spell">' + esc(r.answer) + '</span> · 本题无效' + cnHtml;
       }
     } else if (s.phase === 'finished') {
       fbText = '对局结束';
@@ -1320,7 +1316,7 @@
     }
 
     multiFeedback.className = fbClass;
-    multiFeedback.textContent = fbText;
+    multiFeedback.innerHTML = fbText;
 
     if (s.phase === 'finished') {
       showMultiResult(s);
@@ -1476,44 +1472,16 @@
   /* ============================================================
      启动
      ============================================================ */
-  const loadingOverlay = $('loadingOverlay');
-  const loadingText = $('loadingText');
-
-  function showLoading(text) {
-    if (loadingOverlay) {
-      loadingText.textContent = text || '加载中…';
-      loadingOverlay.hidden = false;
-    }
-  }
-  function hideLoading() {
-    if (loadingOverlay) loadingOverlay.hidden = true;
-  }
-
-  async function boot() {
+  function boot() {
     if (!WORDS.length) {
       soloPool.textContent = '词库为空';
       setNetStatus('offline', '词库加载失败');
       return;
     }
-    const isFile = location.protocol === 'file:';
-    showLoading('正在加载词库音频…');
-    try {
-      await loadAudioPacks((done, total) => {
-        showLoading('正在加载词库音频… (' + done + '/' + total + ')');
-      });
-    } catch (e) {
-      console.warn('音频包加载失败，将使用本地文件/系统发音兜底', e);
+    // 音频按需加载，无需预载，直接可玩
+    if (location.protocol === 'file:') {
+      setNetStatus('offline', '本地打开：建议用本地服务器获取完整音频');
     }
-    hideLoading();
-
-    if (!audioPackReady) {
-      if (isFile) {
-        setNetStatus('offline', '本地打开：建议用本地服务器获取完整音频');
-      } else {
-        setNetStatus('offline', '音频加载失败，使用系统发音');
-      }
-    }
-
     nameInput.value = loadName();
     soloPool.textContent = WORDS.length + ' 词随机';
     bindEvents();
