@@ -17,7 +17,7 @@
   const MATCH_TARGET = 500;
   const MAX_WORDS = 8;
   const COUNTDOWN_MS = 3000;
-  const REVEAL_MS = { wrong: 1500, correct: 2600, none: 3200 };
+  const REVEAL_MS = { wrong: 1500, correct: 1900, none: 2400 };
   const PRESENCE_EVERY = 2500;
   const GUEST_TIMEOUT = 9000;
   const HOST_TIMEOUT = 8000;
@@ -229,12 +229,6 @@
     }
   }
 
-  function wordCn(word) {
-    const dict = window.WORD_CN;
-    if (!dict || !word) return '';
-    return dict[String(word).toLowerCase()] || '';
-  }
-
   function playWord(word, accent) {
     if (!word) return;
     const acc = accent === 'uk' ? 'uk' : 'us';
@@ -385,14 +379,13 @@
       soloInput.disabled = true;
       soloSubmit.disabled = true;
       soloFeedback.className = 'feedback ok';
-      const okCn = wordCn(solo.word);
-      soloFeedback.innerHTML = '✓ 正确！' + (solo.streak > 1 ? '连击 x' + solo.streak + ' · ' : '')
-        + '<span class="spell">' + esc(solo.word) + '</span>'
-        + (okCn ? '<span class="cn">' + esc(okCn) + '</span>' : '');
+      soloFeedback.textContent = solo.streak > 1
+        ? '✓ 正确！连击 x' + solo.streak
+        : '✓ 正确！';
       renderSoloStats();
       solo.timer = setTimeout(() => {
         if (activeScreenId === 'screenSolo') nextSoloWord();
-      }, 1600);
+      }, 700);
       return;
     }
 
@@ -403,15 +396,13 @@
     soloSubmit.disabled = true;
     renderSoloStats(solo.hearts);
     soloFeedback.className = 'feedback answer-reveal';
-    const badCn = wordCn(solo.word);
-    soloFeedback.innerHTML = '正确答案：<span class="spell">' + esc(solo.word) + '</span>'
-      + (badCn ? '<span class="cn">' + esc(badCn) + '</span>' : '');
+    soloFeedback.innerHTML = '正确答案：<span class="spell">' + esc(solo.word) + '</span>';
     const dead = solo.hearts <= 0;
     solo.timer = setTimeout(() => {
       if (activeScreenId !== 'screenSolo') return;
       if (dead) showSoloEnd();
       else nextSoloWord();
-    }, 2400);
+    }, 1700);
   }
 
   function showSoloEnd() {
@@ -1288,23 +1279,23 @@
     } else if (s.phase === 'playing') {
       if (submitted) fbText = '已提交，等待判定…';
       else if (activeTurn) fbText = '你的回合 · 30 秒内拼出单词';
-      else fbText = '等待 ' + esc(oppName) + ' 作答…';
+      else fbText = '等待 ' + oppName + ' 作答…';
     } else if (s.phase === 'reveal' && s.reveal) {
       const r = s.reveal;
-      const rCn = wordCn(r.answer);
-      const cnHtml = rCn ? '<span class="cn">' + esc(rCn) + '</span>' : '';
       if (r.kind === 'correct') {
         fbClass = 'feedback ok';
         const isMe = r.scorer === myRole;
-        fbText = (isMe ? '你' : esc(oppName)) + ' 答对 +' + r.points + ' 分 · <span class="spell">' + esc(r.answer) + '</span>' + cnHtml;
+        fbText = (isMe ? '你' : oppName) + (isMe ? '' : ' ') + '答对 +' + r.points + ' 分';
       } else if (r.kind === 'wrong') {
         fbClass = 'feedback bad';
         const byMe = r.by === myRole;
-        // 换人不换词，不公布答案和释义，避免给下一位玩家提示
-        fbText = (byMe ? '你' : esc(oppName)) + ' 答错了，轮到' + (byMe ? ' ' + esc(oppName) : '你') + '（第 ' + (r.attempt + 1) + ' 轮）';
+        const byName = byMe ? '你' : oppName;
+        const nextName = byMe ? oppName : '你';
+        fbText = byName + (byMe ? '' : ' ') + '答错了，轮到' +
+          (byMe ? ' ' + nextName : nextName) + '（第 ' + (r.attempt + 1) + ' 轮）';
       } else {
         fbClass = 'feedback answer-reveal';
-        fbText = '正确答案：<span class="spell">' + esc(r.answer) + '</span> · 本题无效' + cnHtml;
+        fbText = '正确答案：' + r.answer + ' · 本题无效';
       }
     } else if (s.phase === 'finished') {
       fbText = '对局结束';
@@ -1316,7 +1307,7 @@
     }
 
     multiFeedback.className = fbClass;
-    multiFeedback.innerHTML = fbText;
+    multiFeedback.textContent = fbText;
 
     if (s.phase === 'finished') {
       showMultiResult(s);
@@ -1473,6 +1464,14 @@
      启动
      ============================================================ */
   function boot() {
+    // 开场署名：显示 3 秒后淡出进入主页
+    const splash = $('splash');
+    if (splash) {
+      setTimeout(() => {
+        splash.classList.add('is-out');
+        setTimeout(() => splash.remove(), 800);
+      }, 3000);
+    }
     if (!WORDS.length) {
       soloPool.textContent = '词库为空';
       setNetStatus('offline', '词库加载失败');

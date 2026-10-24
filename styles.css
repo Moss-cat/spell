@@ -1056,6 +1056,66 @@ button { cursor: pointer; }
   .screen-title { font-size: 10px; }
 }
 
+/* ---------- 开场署名 ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(120% 90% at 50% 42%, #0d1421 0%, var(--bg) 72%);
+  transition: opacity 0.75s ease, visibility 0.75s ease;
+}
+.splash.is-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-inner {
+  text-align: center;
+  animation: splashIn 0.9s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.splash-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 22px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--mint), var(--cyan));
+  color: #04110d;
+  font-family: var(--pixel);
+  font-size: 15px;
+  box-shadow: 0 0 36px -6px rgba(94, 242, 176, 0.55);
+}
+
+.splash-label {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  color: var(--muted);
+}
+
+.splash-name {
+  margin: 0;
+  font-family: var(--pixel);
+  font-size: clamp(17px, 4.6vw, 28px);
+  letter-spacing: 6px;
+  background: linear-gradient(120deg, #ffffff, var(--mint) 48%, var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 24px rgba(86, 217, 255, 0.32));
+}
+
+@keyframes splashIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
